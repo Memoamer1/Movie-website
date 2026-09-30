@@ -1,0 +1,51 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.log
+
+# Rider
+.idea/
+*.sln.iml
+
+# VSCode
+.vscode/
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# Visual Studio cache/options
+.vs/
+*.cache
+*.dcu
+*.lib
+*.dll
+*.exe
+*.pdb
+
+# EF Core
+*.mdf
+*.ldf
+App_Data/
+
+# Secrets
+appsettings.Development.json
+*.pfx
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
