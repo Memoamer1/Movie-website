@@ -1,0 +1,151 @@
+@{
+    ViewData["Title"] = "استيراد ومزامنة TMDB - Admin Dashboard";
+    var syncResult = TempData["SyncResult"] as string;
+    var syncSuccess = TempData["SyncSuccess"] as bool? ?? true;
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-danger"><i class="bi bi-cloud-arrow-down-fill"></i> استيراد ومزامنة المحتوى من TMDB</h2>
+            <p class="text-secondary">مزامنة الأفلام والمسلسلات والتصنيفات تلقائياً من قاعدة بيانات TMDB العالمي</p>
+        </div>
+        <a href="/Admin" class="btn btn-outline-light rounded-pill"><i class="bi bi-arrow-right"></i> العودة للوحة التحكم</a>
+    </div>
+
+    @if (!string.IsNullOrEmpty(syncResult))
+    {
+        <div class="alert @(syncSuccess ? "alert-success" : "alert-danger") alert-dismissible fade show rounded-4 shadow-sm" role="alert">
+            <h5 class="alert-heading fw-bold">@(syncSuccess ? "نجحت العملية!" : "حدث تنبيه/خطأ")</h5>
+            <p class="mb-0">@Html.Raw(syncResult)</p>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="row g-4">
+        <!-- Sync Genres Card -->
+        <div class="col-md-4">
+            <div class="card bg-dark text-white border-secondary rounded-4 shadow h-100 p-3">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <h4 class="card-title fw-bold text-warning"><i class="bi bi-tags-fill me-2"></i>مزامنة التصنيفات</h4>
+                        <p class="card-text text-secondary">جلب وتحديث كافة التصنيفات (Genres) المعتمدة من TMDB للأفلام والمسلسلات.</p>
+                    </div>
+                    <form asp-controller="AdminImport" asp-action="SyncGenres" method="post" class="mt-3">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-warning w-100 rounded-pill fw-bold">
+                            <i class="bi bi-arrow-repeat"></i> بدء مزامنة التصنيفات
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sync Movies Card -->
+        <div class="col-md-4">
+            <div class="card bg-dark text-white border-secondary rounded-4 shadow h-100 p-3">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <h4 class="card-title fw-bold text-info"><i class="bi bi-film me-2"></i>مزامنة قائمة أفلام</h4>
+                        <p class="card-text text-secondary">جلب وتحديث قمم الأفلام حسب الفئات الشائعة أو الأكثر تقييماً.</p>
+                    </div>
+                    <form asp-controller="AdminImport" asp-action="SyncMovies" method="post" class="mt-3">
+                        @Html.AntiForgeryToken()
+                        <div class="mb-3">
+                            <label class="form-label text-secondary fs-7">اختر فئة الأفلام</label>
+                            <select name="category" class="form-select bg-dark text-white border-secondary rounded-3">
+                                <option value="popular">الأكثر شعبية (Popular)</option>
+                                <option value="top_rated">الأعلى تقييماً (Top Rated)</option>
+                                <option value="now_playing">في دور العرض حالياً (Now Playing)</option>
+                                <option value="upcoming">القادمة قريباً (Upcoming)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-secondary fs-7">رقم الصفحة (TMDB Page)</label>
+                            <input type="number" name="page" value="1" min="1" max="50" class="form-control bg-dark text-white border-secondary rounded-3" />
+                        </div>
+                        <button type="submit" class="btn btn-info text-white w-100 rounded-pill fw-bold">
+                            <i class="bi bi-download"></i> استيراد فئة الأفلام
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sync Series Card -->
+        <div class="col-md-4">
+            <div class="card bg-dark text-white border-secondary rounded-4 shadow h-100 p-3">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <h4 class="card-title fw-bold text-success"><i class="bi bi-tv me-2"></i>مزامنة قائمة مسلسلات</h4>
+                        <p class="card-text text-secondary">جلب وتحديث المسلسلات حسب الفئات الشائعة أو المسلسلات المعروضة الآن.</p>
+                    </div>
+                    <form asp-controller="AdminImport" asp-action="SyncSeries" method="post" class="mt-3">
+                        @Html.AntiForgeryToken()
+                        <div class="mb-3">
+                            <label class="form-label text-secondary fs-7">اختر فئة المسلسلات</label>
+                            <select name="category" class="form-select bg-dark text-white border-secondary rounded-3">
+                                <option value="popular">الأكثر شعبية (Popular)</option>
+                                <option value="top_rated">الأعلى تقييماً (Top Rated)</option>
+                                <option value="on_the_air">يُعرض على التلفزيون (On The Air)</option>
+                                <option value="airing_today">تعرض اليوم (Airing Today)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-secondary fs-7">رقم الصفحة (TMDB Page)</label>
+                            <input type="number" name="page" value="1" min="1" max="50" class="form-control bg-dark text-white border-secondary rounded-3" />
+                        </div>
+                        <button type="submit" class="btn btn-success w-100 rounded-pill fw-bold">
+                            <i class="bi bi-download"></i> استيراد فئة المسلسلات
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="my-5 border-secondary" />
+
+    <!-- Direct Import Section by TMDB ID -->
+    <h3 class="fw-bold text-white mb-4"><i class="bi bi-search me-2"></i>استيراد مباشر بواسطة المعرف (TMDB ID)</h3>
+
+    <div class="row g-4">
+        <!-- Single Movie Import -->
+        <div class="col-md-6">
+            <div class="card bg-dark text-white border-secondary rounded-4 shadow p-3">
+                <div class="card-body">
+                    <h5 class="fw-bold text-primary"><i class="bi bi-film me-2"></i>استيراد فيلم محدد</h5>
+                    <p class="text-secondary fs-7">أدخل رقم معرف الفيلم من موقع TMDB (مثال: 550 لفيلم Fight Club).</p>
+                    <form asp-controller="AdminImport" asp-action="ImportMovie" method="post" class="row g-2">
+                        @Html.AntiForgeryToken()
+                        <div class="col-8">
+                            <input type="number" name="tmdbId" placeholder="مثال: 550" class="form-control bg-dark text-white border-secondary rounded-pill" required />
+                        </div>
+                        <div class="col-4">
+                            <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Single Series Import -->
+        <div class="col-md-6">
+            <div class="card bg-dark text-white border-secondary rounded-4 shadow p-3">
+                <div class="card-body">
+                    <h5 class="fw-bold text-danger"><i class="bi bi-tv me-2"></i>استيراد مسلسل محدد (مع المواسم والحلقات)</h5>
+                    <p class="text-secondary fs-7">أدخل رقم معرف المسلسل من موقع TMDB (مثال: 1396 لفيلم Breaking Bad).</p>
+                    <form asp-controller="AdminImport" asp-action="ImportSeries" method="post" class="row g-2">
+                        @Html.AntiForgeryToken()
+                        <div class="col-8">
+                            <input type="number" name="tmdbId" placeholder="مثال: 1396" class="form-control bg-dark text-white border-secondary rounded-pill" required />
+                        </div>
+                        <div class="col-4">
+                            <button type="submit" class="btn btn-danger w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

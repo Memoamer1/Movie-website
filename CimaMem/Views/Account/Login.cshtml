@@ -1,0 +1,46 @@
+@model CimaMem.ViewModels.LoginViewModel
+
+@{
+    ViewData["Title"] = "تسجيل الدخول";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6 col-lg-5">
+        <div class="card bg-dark text-white border-secondary shadow-lg rounded-4">
+            <div class="card-body p-4 p-md-5">
+                <h2 class="text-center fw-bold mb-4 text-white"><i class="bi bi-box-arrow-in-right me-2 text-danger"></i>تسجيل الدخول</h2>
+                <form asp-action="Login" method="post">
+                    <input type="hidden" asp-for="ReturnUrl" />
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <div class="form-floating mb-3">
+                        <input asp-for="EmailOrUserName" class="form-control" placeholder="اسم المستخدم أو البريد" />
+                        <label asp-for="EmailOrUserName">اسم المستخدم أو البريد</label>
+                        <span asp-validation-for="EmailOrUserName" class="text-danger small"></span>
+                    </div>
+
+                    <div class="form-floating mb-3">
+                        <input asp-for="Password" class="form-control" placeholder="كلمة المرور" />
+                        <label asp-for="Password">كلمة المرور</label>
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                    </div>
+
+                    <div class="form-check mb-4">
+                        <input asp-for="RememberMe" class="form-check-input bg-dark border-secondary" />
+                        <label asp-for="RememberMe" class="form-check-label text-secondary">تذكرني</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-danger btn-lg w-100 rounded-pill mb-3 fw-bold shadow">دخول</button>
+                    <div class="text-center">
+                        <span class="text-secondary">ليس لديك حساب؟</span>
+                        <a asp-action="Register" class="text-danger text-decoration-none fw-bold ms-1">إنشاء حساب جديد</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

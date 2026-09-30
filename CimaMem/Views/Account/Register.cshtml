@@ -1,0 +1,52 @@
+@model CimaMem.ViewModels.RegisterViewModel
+
+@{
+    ViewData["Title"] = "إنشاء حساب جديد";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6 col-lg-5">
+        <div class="card bg-dark text-white border-secondary shadow-lg rounded-4">
+            <div class="card-body p-4 p-md-5">
+                <h2 class="text-center fw-bold mb-4 text-white"><i class="bi bi-person-plus me-2 text-danger"></i>إنشاء حساب جديد</h2>
+                <form asp-action="Register" method="post">
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <div class="form-floating mb-3">
+                        <input asp-for="UserName" class="form-control" placeholder="اسم المستخدم" />
+                        <label asp-for="UserName">اسم المستخدم</label>
+                        <span asp-validation-for="UserName" class="text-danger small"></span>
+                    </div>
+
+                    <div class="form-floating mb-3">
+                        <input asp-for="Email" class="form-control" placeholder="البريد الإلكتروني" />
+                        <label asp-for="Email">البريد الإلكتروني</label>
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
+
+                    <div class="form-floating mb-3">
+                        <input asp-for="Password" class="form-control" placeholder="كلمة المرور" />
+                        <label asp-for="Password">كلمة المرور</label>
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                    </div>
+
+                    <div class="form-floating mb-4">
+                        <input asp-for="ConfirmPassword" class="form-control" placeholder="تأكيد كلمة المرور" />
+                        <label asp-for="ConfirmPassword">تأكيد كلمة المرور</label>
+                        <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                    </div>
+
+                    <button type="submit" class="btn btn-danger btn-lg w-100 rounded-pill mb-3 fw-bold shadow">تسجيل الحساب</button>
+                    <div class="text-center">
+                        <span class="text-secondary">لديك حساب بالفعل؟</span>
+                        <a asp-action="Login" class="text-danger text-decoration-none fw-bold ms-1">تسجيل الدخول</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

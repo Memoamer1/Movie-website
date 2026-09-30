@@ -1,0 +1,21 @@
+@model CimaMem.Models.ErrorViewModel
+@{
+    ViewData["Title"] = "خطأ - CineWave";
+}
+
+<div class="row justify-content-center text-center py-5 mt-5">
+    <div class="col-md-6">
+        <div class="card bg-dark text-white border-secondary shadow-lg rounded-4 p-5">
+            <h1 class="display-1 text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill"></i> 500</h1>
+            <h2 class="fw-bold mb-3">حدث خطأ غير متوقع!</h2>
+            <p class="text-secondary mb-4">نعتذر عن هذا الخلل المؤقت، فريق العمل يعمل على معالجته فوراً.</p>
+            @if (Model?.ShowRequestId == true)
+            {
+                <p class="small text-muted mb-4">رمز تتبع الطلب: <code>@Model.RequestId</code></p>
+            }
+            <div>
+                <a href="/" class="btn btn-danger rounded-pill px-4 fw-bold">العودة للصفحة الرئيسية</a>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,193 @@
+@model CimaMem.Entities.Series
+@using CimaMem.Entities
+@{
+    ViewData["Title"] = $"{Model.Title} - مشاهدة جميع المواسم والحلقات على CineWave";
+    var relatedSeries = ViewBag.RelatedSeries as List<Series> ?? new List<Series>();
+}
+
+<!-- Hero Backdrop Header -->
+<div class="position-relative w-100 mb-5" style="min-height: 450px; background: linear-gradient(0deg, #0f1015 0%, rgba(15,16,21,0.6) 100%), url('@(Model.BackdropUrl ?? Model.PosterUrl ?? "https://image.tmdb.org/t/p/original/t58AfroL42PaiipWlYy2WUt0WH5.jpg")') center/cover no-repeat;">
+    <div class="container py-5">
+        <div class="row align-items-center g-4 pt-4">
+            <!-- Poster -->
+            <div class="col-md-3 text-center text-md-start">
+                <div class="rounded-4 overflow-hidden shadow-lg border border-secondary" style="max-width: 280px; margin: 0 auto;">
+                    <img src="@(Model.PosterUrl ?? "https://via.placeholder.com/300x450")" alt="@Model.Title" class="img-fluid w-100" />
+                </div>
+            </div>
+
+            <!-- Series Details Header -->
+            <div class="col-md-9 text-white">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <span class="badge bg-success rounded-pill px-3 py-2 fw-bold fs-6"><i class="bi bi-star-fill text-warning me-1"></i> @Model.Rating.ToString("0.0") / 10</span>
+                    <span class="badge bg-dark border border-secondary text-secondary rounded-pill px-3 py-2">@(Model.FirstAirDate?.Year.ToString() ?? "2024")</span>
+                    <span class="badge bg-dark border border-secondary text-secondary rounded-pill px-3 py-2"><i class="bi bi-layers me-1"></i> @Model.Seasons.Count مواسم</span>
+                    @foreach (var sg in Model.SeriesGenres)
+                    {
+                        <span class="badge bg-black bg-opacity-75 border border-success text-success rounded-pill px-3 py-2">@sg.Genre?.Name</span>
+                    }
+                </div>
+
+                <h1 class="display-4 fw-extrabold mb-2">@Model.Title</h1>
+                @if (!string.IsNullOrEmpty(Model.OriginalTitle))
+                {
+                    <h5 class="text-secondary mb-3">@Model.OriginalTitle</h5>
+                }
+
+                <p class="lead text-light text-opacity-75 mb-4" style="max-width: 800px;">
+                    @(string.IsNullOrEmpty(Model.Overview) ? "لا توجد نبذة مختصرة متاحة لهذا المسلسل حالياً." : Model.Overview)
+                </p>
+
+                <div class="d-flex flex-wrap gap-3">
+                    <a href="#seasons-section" class="btn btn-success btn-lg rounded-pill px-4 fw-bold shadow">
+                        <i class="bi bi-collection-play-fill me-2"></i> استعراض الحلقات والمواسم
+                    </a>
+                    <button type="button" class="btn btn-outline-light btn-lg rounded-pill px-4" onclick="toggleSeriesFav(@Model.Id, this)">
+                        <i class="bi bi-heart me-2 text-danger"></i> إضافة للمفضلة
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container py-2" id="seasons-section">
+    <!-- Seasons & Episodes Accordion Section -->
+    <h3 class="fw-bold text-white mb-4"><i class="bi bi-layers-fill me-2 text-success"></i>قائمة المواسم والحلقات</h3>
+
+    @if (Model.Seasons.Any())
+    {
+        <div class="accordion accordion-flush" id="seasonsAccordion">
+            @foreach (var season in Model.Seasons.OrderBy(s => s.SeasonNumber))
+            {
+                var isFirst = season.SeasonNumber == Model.Seasons.Min(s => s.SeasonNumber);
+                <div class="accordion-item bg-dark border border-secondary rounded-4 overflow-hidden mb-3">
+                    <h2 class="accordion-header" id="heading-@season.Id">
+                        <button class="accordion-button bg-dark text-white fw-bold shadow-none @(isFirst ? "" : "collapsed")" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-@season.Id" aria-expanded="@(isFirst ? "true" : "false")" aria-controls="collapse-@season.Id">
+                            <i class="bi bi-film me-2 text-success"></i> الموسم @season.SeasonNumber @(!string.IsNullOrEmpty(season.Title) ? $" - {season.Title}" : "") (@season.Episodes.Count الحلقة)
+                        </button>
+                    </h2>
+                    <div id="collapse-@season.Id" class="accordion-collapse collapse @(isFirst ? "show" : "")" aria-labelledby="heading-@season.Id" data-bs-parent="#seasonsAccordion">
+                        <div class="accordion-body bg-black bg-opacity-50">
+                            @if (season.Episodes.Any())
+                            {
+                                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+                                    @foreach (var ep in season.Episodes.OrderBy(e => e.EpisodeNumber))
+                                    {
+                                        <div class="col">
+                                            <div class="card bg-dark text-white border-secondary rounded-3 h-100 p-2">
+                                                <div class="position-relative rounded-2 overflow-hidden mb-2" style="aspect-ratio: 16/9; background-color: #1a1d24;">
+                                                    <img src="@(ep.StillUrl ?? Model.BackdropUrl ?? Model.PosterUrl ?? "https://via.placeholder.com/300x169")" class="w-100 h-100 object-fit-cover" alt="@ep.Title" />
+                                                    <span class="position-absolute top-0 start-0 m-2 badge bg-success fw-bold">الحلقة @ep.EpisodeNumber</span>
+                                                </div>
+                                                <h6 class="fw-bold fs-6 text-truncate mb-1">@(string.IsNullOrEmpty(ep.Title) ? $"الحلقة {ep.EpisodeNumber}" : ep.Title)</h6>
+                                                <button class="btn btn-outline-success btn-sm rounded-pill w-100 mt-2" onclick="playEpisode('@(ep.VideoUrl ?? "https://www.youtube.com/embed/dQw4w9WgXcQ")', 'الموسم @season.SeasonNumber - الحلقة @ep.EpisodeNumber')">
+                                                    <i class="bi bi-play-circle me-1"></i> تشغيل الحلقة
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-secondary mb-0">لم يتم إضافة حلقات بعد لهذا الموسم.</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-dark border-secondary text-secondary rounded-4">
+            لا توجد مواسم أو حلقات مسجلة حالياً لهذا المسلسل.
+        </div>
+    }
+
+    <!-- Related Series Section -->
+    @if (relatedSeries.Any())
+    {
+        <section class="mt-5">
+            <h3 class="fw-bold text-white mb-4"><i class="bi bi-collection-play me-2 text-success"></i>مسلسلات قد تعجبك</h3>
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-3">
+                @foreach (var rs in relatedSeries)
+                {
+                    <div class="col">
+                        <div class="media-card h-100">
+                            <a href="/Series/Details/@rs.Id" class="text-decoration-none">
+                                <div class="media-card-poster">
+                                    <img src="@(rs.PosterUrl ?? "https://via.placeholder.com/300x450")" alt="@rs.Title" loading="lazy" />
+                                    <div class="media-card-badge"><i class="bi bi-star-fill text-warning me-1"></i>@rs.Rating.ToString("0.0")</div>
+                                </div>
+                                <div class="media-card-body">
+                                    <h6 class="media-card-title text-white">@rs.Title</h6>
+                                    <div class="media-card-info">
+                                        <span>@(rs.FirstAirDate?.Year.ToString() ?? "2024")</span>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+<!-- Episode Player Modal -->
+<div class="modal fade" id="episodeModal" tabindex="-1" aria-labelledby="episodeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content bg-dark text-white border-secondary rounded-4">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold text-success" id="episodeModalLabel">مشاهدة الحلقة</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="ratio ratio-16x9">
+                    <iframe id="episodeIframe" src="" allowfullscreen></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function playEpisode(url, title) {
+            document.getElementById('episodeModalLabel').innerText = title;
+            document.getElementById('episodeIframe').src = url;
+            var modal = new bootstrap.Modal(document.getElementById('episodeModal'));
+            modal.show();
+        }
+
+        document.getElementById('episodeModal').addEventListener('hidden.bs.modal', function () {
+            document.getElementById('episodeIframe').src = '';
+        });
+
+        function toggleSeriesFav(seriesId, btn) {
+            fetch('/Favorites/ToggleSeries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `seriesId=${seriesId}`
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    if (data.isAdded) {
+                        btn.classList.remove('btn-outline-light');
+                        btn.classList.add('btn-danger');
+                        btn.innerHTML = '<i class="bi bi-heart-fill me-2"></i> في المفضلة';
+                    } else {
+                        btn.classList.remove('btn-danger');
+                        btn.classList.add('btn-outline-light');
+                        btn.innerHTML = '<i class="bi bi-heart me-2 text-danger"></i> إضافة للمفضلة';
+                    }
+                } else {
+                    window.location.href = '/Account/Login';
+                }
+            });
+        }
+    </script>
+}

@@ -1,0 +1,69 @@
+@{
+    ViewData["Title"] = "لوحة التحكم - Admin Dashboard";
+    int moviesCount = ViewBag.MoviesCount ?? 0;
+    int seriesCount = ViewBag.SeriesCount ?? 0;
+    int usersCount = ViewBag.UsersCount ?? 0;
+    int genresCount = ViewBag.GenresCount ?? 0;
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-danger">لوحة تحكم المسؤول (Admin Dashboard)</h2>
+            <p class="text-secondary">مرحباً بك في مركز إدارة منصة السينما CineWave</p>
+        </div>
+        <a href="/Admin/Import" class="btn btn-warning rounded-pill px-4 fw-bold shadow">
+            <i class="bi bi-cloud-arrow-down-fill"></i> استيراد ومزامنة TMDB
+        </a>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <a href="/Admin/Movies" class="text-decoration-none">
+                <div class="card shadow-sm border-0 bg-dark text-white rounded-4 p-4 text-center media-card">
+                    <h5 class="text-secondary">عدد الأفلام</h5>
+                    <p class="display-5 fw-bold text-info mb-0">@moviesCount</p>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="/Admin/Series" class="text-decoration-none">
+                <div class="card shadow-sm border-0 bg-dark text-white rounded-4 p-4 text-center media-card">
+                    <h5 class="text-secondary">عدد المسلسلات</h5>
+                    <p class="display-5 fw-bold text-success mb-0">@seriesCount</p>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-dark text-white rounded-4 p-4 text-center">
+                <h5 class="text-secondary">المستخدمين</h5>
+                <p class="display-5 fw-bold text-warning mb-0">@usersCount</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-dark text-white rounded-4 p-4 text-center">
+                <h5 class="text-secondary">التصنيفات</h5>
+                <p class="display-5 fw-bold text-danger mb-0">@genresCount</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card bg-dark text-white border-secondary rounded-4 p-4 shadow h-100">
+                <h4 class="fw-bold mb-3 text-warning">إجراءات وإدارة المحتوى</h4>
+                <div class="d-grid gap-3">
+                    <a href="/Admin/Movies" class="btn btn-outline-info rounded-3 text-end py-2 fs-6">
+                        <i class="bi bi-film me-2"></i> إدارة وحذف الأفلام (@moviesCount)
+                    </a>
+                    <a href="/Admin/Series" class="btn btn-outline-success rounded-3 text-end py-2 fs-6">
+                        <i class="bi bi-tv me-2"></i> إدارة وحذف المسلسلات والمواسم (@seriesCount)
+                    </a>
+                    <a href="/Admin/Import" class="btn btn-outline-warning rounded-3 text-end py-2 fs-6">
+                        <i class="bi bi-arrow-repeat me-2"></i> مزامنة واستيراد المحتوى تلقائياً من TMDB
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

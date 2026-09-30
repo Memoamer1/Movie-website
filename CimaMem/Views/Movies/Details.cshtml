@@ -1,0 +1,120 @@
+@model CimaMem.Entities.Movie
+@using CimaMem.Entities
+@{
+    ViewData["Title"] = $"{Model.Title} - مشاهدة على CineWave";
+    var relatedMovies = ViewBag.RelatedMovies as List<Movie> ?? new List<Movie>();
+}
+
+<!-- Hero Backdrop Header -->
+<div class="position-relative w-100 mb-5" style="min-height: 450px; background: linear-gradient(0deg, #0f1015 0%, rgba(15,16,21,0.6) 100%), url('@(Model.BackdropUrl ?? Model.PosterUrl ?? "https://image.tmdb.org/t/p/original/t58AfroL42PaiipWlYy2WUt0WH5.jpg")') center/cover no-repeat;">
+    <div class="container py-5">
+        <div class="row align-items-center g-4 pt-4">
+            <!-- Poster -->
+            <div class="col-md-3 text-center text-md-start">
+                <div class="rounded-4 overflow-hidden shadow-lg border border-secondary" style="max-width: 280px; margin: 0 auto;">
+                    <img src="@(Model.PosterUrl ?? "https://via.placeholder.com/300x450")" alt="@Model.Title" class="img-fluid w-100" />
+                </div>
+            </div>
+
+            <!-- Movie Details Header -->
+            <div class="col-md-9 text-white">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <span class="badge bg-danger rounded-pill px-3 py-2 fw-bold fs-6"><i class="bi bi-star-fill text-warning me-1"></i> @Model.Rating.ToString("0.0") / 10</span>
+                    <span class="badge bg-dark border border-secondary text-secondary rounded-pill px-3 py-2">@(Model.ReleaseDate?.Year.ToString() ?? "2024")</span>
+                    @if (Model.Runtime.HasValue)
+                    {
+                        <span class="badge bg-dark border border-secondary text-secondary rounded-pill px-3 py-2"><i class="bi bi-clock me-1"></i> @Model.Runtime دقيقة</span>
+                    }
+                    @foreach (var mg in Model.MovieGenres)
+                    {
+                        <span class="badge bg-black bg-opacity-75 border border-danger text-danger rounded-pill px-3 py-2">@mg.Genre?.Name</span>
+                    }
+                </div>
+
+                <h1 class="display-4 fw-extrabold mb-2">@Model.Title</h1>
+                @if (!string.IsNullOrEmpty(Model.OriginalTitle))
+                {
+                    <h5 class="text-secondary mb-3">@Model.OriginalTitle</h5>
+                }
+
+                <p class="lead text-light text-opacity-75 mb-4" style="max-width: 800px;">
+                    @(string.IsNullOrEmpty(Model.Overview) ? "لا توجد نبذة مختصرة متاحة لهذا الفيلم حالياً." : Model.Overview)
+                </p>
+
+                <div class="d-flex flex-wrap gap-3">
+                    <a href="#video-player" class="btn btn-danger btn-lg rounded-pill px-4 fw-bold shadow">
+                        <i class="bi bi-play-circle-fill me-2"></i> مشاهدة الفيلم
+                    </a>
+                    <button type="button" class="btn btn-outline-light btn-lg rounded-pill px-4" onclick="toggleMovieFav(@Model.Id, this)">
+                        <i class="bi bi-heart me-2 text-danger"></i> إضافة للمفضلة
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container py-2">
+    <!-- Stream Video Player Container -->
+    <div id="video-player" class="mb-5 pt-3">
+        <h3 class="fw-bold text-white mb-3"><i class="bi bi-play-btn-fill me-2 text-danger"></i>مشاهدة الفيلم مباشرة</h3>
+        <partial name="_VideoPlayerPartial" model="Model.VideoUrl" />
+    </div>
+
+    <!-- Related Movies Section -->
+    @if (relatedMovies.Any())
+    {
+        <section class="mt-5">
+            <h3 class="fw-bold text-white mb-4"><i class="bi bi-collection-play me-2 text-danger"></i>أفلام قد تعجبك</h3>
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-3">
+                @foreach (var rm in relatedMovies)
+                {
+                    <div class="col">
+                        <div class="media-card h-100">
+                            <a href="/Movie/Details/@rm.Id" class="text-decoration-none">
+                                <div class="media-card-poster">
+                                    <img src="@(rm.PosterUrl ?? "https://via.placeholder.com/300x450")" alt="@rm.Title" loading="lazy" />
+                                    <div class="media-card-badge"><i class="bi bi-star-fill text-warning me-1"></i>@rm.Rating.ToString("0.0")</div>
+                                </div>
+                                <div class="media-card-body">
+                                    <h6 class="media-card-title text-white">@rm.Title</h6>
+                                    <div class="media-card-info">
+                                        <span>@(rm.ReleaseDate?.Year.ToString() ?? "2024")</span>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        function toggleMovieFav(movieId, btn) {
+            fetch('/Favorites/ToggleMovie', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `movieId=${movieId}`
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    if (data.isAdded) {
+                        btn.classList.remove('btn-outline-light');
+                        btn.classList.add('btn-danger');
+                        btn.innerHTML = '<i class="bi bi-heart-fill me-2"></i> في المفضلة';
+                    } else {
+                        btn.classList.remove('btn-danger');
+                        btn.classList.add('btn-outline-light');
+                        btn.innerHTML = '<i class="bi bi-heart me-2 text-danger"></i> إضافة للمفضلة';
+                    }
+                } else {
+                    window.location.href = '/Account/Login';
+                }
+            });
+        }
+    </script>
+}

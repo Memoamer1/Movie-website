@@ -1,0 +1,60 @@
+@model string
+@{
+    var videoUrl = string.IsNullOrEmpty(Model) ? "https://www.youtube.com/embed/dQw4w9WgXcQ" : Model;
+}
+
+<div class="video-player-wrapper position-relative rounded-4 overflow-hidden border border-secondary shadow-lg bg-black">
+    <!-- Player Top Control Bar -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center bg-black bg-opacity-75 p-3 border-bottom border-secondary">
+        <div class="d-flex align-items-center gap-2 mb-2 mb-md-0">
+            <span class="text-white fw-bold"><i class="bi bi-hdd-network-fill text-danger me-2"></i>اختر سيرفر المشاهدة:</span>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-danger btn-sm active" onclick="switchServer('@videoUrl', this)">سيرفر VIP</button>
+                <button type="button" class="btn btn-outline-light btn-sm" onclick="switchServer('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', this)">سيرفر 2 (HD)</button>
+                <button type="button" class="btn btn-outline-light btn-sm" onclick="switchServer('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', this)">سيرفر 3 (سريع)</button>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-dark border border-secondary text-white btn-sm rounded-pill" onclick="toggleLights()">
+                <i class="bi bi-lightbulb-fill text-warning me-1"></i> <span id="lights-text">تعتيم الشاشة</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Video Frame Container -->
+    <div class="ratio ratio-16x9 position-relative">
+        <iframe id="main-video-iframe" src="@videoUrl" title="CineWave Video Player" allowfullscreen allow="autoplay"></iframe>
+    </div>
+</div>
+
+<script>
+    function switchServer(url, btn) {
+        document.getElementById('main-video-iframe').src = url;
+        const group = btn.closest('.btn-group');
+        group.querySelectorAll('.btn').forEach(b => {
+            b.classList.remove('btn-danger', 'active');
+            b.classList.add('btn-outline-light');
+        });
+        btn.classList.remove('btn-outline-light');
+        btn.classList.add('btn-danger', 'active');
+    }
+
+    function toggleLights() {
+        let overlay = document.getElementById('lights-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'lights-overlay';
+            overlay.style.position = 'fixed';
+            overlay.style.inset = '0';
+            overlay.style.backgroundColor = 'rgba(0,0,0,0.92)';
+            overlay.style.zIndex = '9998';
+            overlay.style.pointerEvents = 'none';
+            document.body.appendChild(overlay);
+            document.getElementById('lights-text').innerText = 'إضاءة الشاشة';
+        } else {
+            overlay.remove();
+            document.getElementById('lights-text').innerText = 'تعتيم الشاشة';
+        }
+    }
+</script>

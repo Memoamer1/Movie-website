@@ -1,8 +1,119 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
+@using CimaMem.Entities
+@{
+    ViewData["Title"] = "الرئيسية - CineWave عالم السينما والترفيه";
+    var heroMovies = ViewBag.HeroMovies as List<Movie> ?? new List<Movie>();
+    var latestMovies = ViewBag.LatestMovies as List<Movie> ?? new List<Movie>();
+    var latestSeries = ViewBag.LatestSeries as List<Series> ?? new List<Series>();
+    var topRatedMovies = ViewBag.TopRatedMovies as List<Movie> ?? new List<Movie>();
+    var genres = ViewBag.Genres as List<Genre> ?? new List<Genre>();
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="container py-3">
+    <!-- Hero Slider Section -->
+    @if (heroMovies.Any())
+    {
+        var firstHero = heroMovies.First();
+        <div class="hero-banner mb-5 position-relative shadow-lg" style="background-image: url('@(firstHero.BackdropUrl ?? firstHero.PosterUrl ?? "https://image.tmdb.org/t/p/original/t58AfroL42PaiipWlYy2WUt0WH5.jpg")');">
+            <div class="hero-overlay">
+                <div class="col-lg-7 col-md-9 text-white">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-danger rounded-pill px-3 py-1 fw-bold"><i class="bi bi-star-fill text-warning me-1"></i> @firstHero.Rating.ToString("0.0")</span>
+                        <span class="badge bg-dark border border-secondary text-secondary rounded-pill px-3">@(firstHero.ReleaseDate?.Year.ToString() ?? "2024")</span>
+                        @foreach (var mg in firstHero.MovieGenres.Take(2))
+                        {
+                            <span class="badge bg-black bg-opacity-50 text-light rounded-pill px-3">@mg.Genre?.Name</span>
+                        }
+                    </div>
+                    <h1 class="display-4 fw-extrabold mb-3 text-white">@firstHero.Title</h1>
+                    <p class="lead text-light text-opacity-75 mb-4 d-none d-md-block" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
+                        @(string.IsNullOrEmpty(firstHero.Overview) ? "استمتع بمشاهدة هذا الفيلم الرائع بجودة عالية وسرعة فائقة على منصة CineWave." : firstHero.Overview)
+                    </p>
+                    <div class="d-flex gap-3">
+                        <a href="/Movie/Details/@firstHero.Id" class="btn btn-danger btn-lg rounded-pill px-4 fw-bold shadow">
+                            <i class="bi bi-play-fill me-1"></i> شاهد الآن
+                        </a>
+                        <a href="/Movie/Details/@firstHero.Id" class="btn btn-outline-light btn-lg rounded-pill px-4">
+                            <i class="bi bi-info-circle me-1"></i> التفاصيل
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Genres Quick Bar -->
+    @if (genres.Any())
+    {
+        <div class="d-flex align-items-center gap-2 overflow-auto pb-3 mb-4 scrollbar-none">
+            <a href="/Movies" class="btn btn-danger rounded-pill px-4 fw-bold flex-shrink-0">الكل</a>
+            @foreach (var g in genres)
+            {
+                <a href="/Genre/@g.Id" class="btn btn-dark border border-secondary text-light rounded-pill px-3 flex-shrink-0 hover-danger">@g.Name</a>
+            }
+        </div>
+    }
+
+    <!-- Latest Movies Section -->
+    <section class="mb-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="fw-bold text-white mb-0"><i class="bi bi-film me-2 text-danger"></i>أحدث الأفلام</h3>
+            <a href="/Movies" class="btn btn-link text-danger text-decoration-none fw-bold">عرض الكل <i class="bi bi-chevron-left"></i></a>
+        </div>
+
+        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-3">
+            @foreach (var movie in latestMovies)
+            {
+                <div class="col">
+                    <div class="media-card h-100">
+                        <a href="/Movie/Details/@movie.Id" class="text-decoration-none">
+                            <div class="media-card-poster">
+                                <img src="@(movie.PosterUrl ?? "https://via.placeholder.com/300x450?text=No+Poster")" alt="@movie.Title" loading="lazy" />
+                                <div class="media-card-badge"><i class="bi bi-star-fill text-warning me-1"></i>@movie.Rating.ToString("0.0")</div>
+                                <div class="media-card-quality">HD</div>
+                            </div>
+                            <div class="media-card-body">
+                                <h6 class="media-card-title text-white">@movie.Title</h6>
+                                <div class="media-card-info d-flex justify-content-between align-items-center">
+                                    <span>@(movie.ReleaseDate?.Year.ToString() ?? "2024")</span>
+                                    <span class="text-danger"><i class="bi bi-play-circle-fill"></i></span>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- Latest Series Section -->
+    <section class="mb-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="fw-bold text-white mb-0"><i class="bi bi-tv me-2 text-success"></i>أحدث المسلسلات</h3>
+            <a href="/Series" class="btn btn-link text-success text-decoration-none fw-bold">عرض الكل <i class="bi bi-chevron-left"></i></a>
+        </div>
+
+        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-3">
+            @foreach (var show in latestSeries)
+            {
+                <div class="col">
+                    <div class="media-card h-100">
+                        <a href="/Series/Details/@show.Id" class="text-decoration-none">
+                            <div class="media-card-poster">
+                                <img src="@(show.PosterUrl ?? "https://via.placeholder.com/300x450?text=No+Poster")" alt="@show.Title" loading="lazy" />
+                                <div class="media-card-badge"><i class="bi bi-star-fill text-warning me-1"></i>@show.Rating.ToString("0.0")</div>
+                                <div class="media-card-quality bg-success">مسلسل</div>
+                            </div>
+                            <div class="media-card-body">
+                                <h6 class="media-card-title text-white">@show.Title</h6>
+                                <div class="media-card-info d-flex justify-content-between align-items-center">
+                                    <span>@(show.FirstAirDate?.Year.ToString() ?? "2024")</span>
+                                    <span class="text-success"><i class="bi bi-play-circle-fill"></i></span>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
 </div>

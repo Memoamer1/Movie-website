@@ -1,0 +1,87 @@
+@model List<CimaMem.Entities.Movie>
+@{
+    ViewData["Title"] = "إدارة الأفلام - Admin Dashboard";
+    var successMsg = TempData["SuccessMessage"] as string;
+}
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-danger"><i class="bi bi-film me-2"></i>إدارة قمم الأفلام (@Model.Count)</h2>
+            <p class="text-secondary mb-0">عرض وحذف وتعديل محتوى مكتبة الأفلام في قاعدة البيانات</p>
+        </div>
+        <div>
+            <a href="/Admin/Import" class="btn btn-warning rounded-pill px-4 fw-bold me-2">
+                <i class="bi bi-cloud-arrow-down-fill me-1"></i> استيراد من TMDB
+            </a>
+            <a href="/Admin" class="btn btn-outline-light rounded-pill px-3">العودة للوحة التحكم</a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMsg))
+    {
+        <div class="alert alert-success alert-dismissible fade show rounded-4" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i> @successMsg
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="card bg-dark text-white border-secondary rounded-4 shadow overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead class="table-borderless border-bottom border-secondary text-secondary">
+                    <tr>
+                        <th scope="col" style="width: 80px;">الملصق</th>
+                        <th scope="col">العنوان</th>
+                        <th scope="col">السنة</th>
+                        <th scope="col">التقييم</th>
+                        <th scope="col">التصنيفات</th>
+                        <th scope="col" class="text-end" style="width: 150px;">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Any())
+                    {
+                        foreach (var movie in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <img src="@(movie.PosterUrl ?? "https://via.placeholder.com/60x90")" alt="@movie.Title" class="rounded-2" style="width: 50px; height: 75px; object-fit: cover;" />
+                                </td>
+                                <td>
+                                    <h6 class="fw-bold text-white mb-0">@movie.Title</h6>
+                                    <small class="text-secondary">TMDB ID: @(movie.TmdbId?.ToString() ?? "لا يوجد")</small>
+                                </td>
+                                <td>@(movie.ReleaseDate?.Year.ToString() ?? "2024")</td>
+                                <td><span class="badge bg-warning text-dark font-bold"><i class="bi bi-star-fill me-1"></i>@movie.Rating.ToString("0.0")</span></td>
+                                <td>
+                                    @foreach (var mg in movie.MovieGenres)
+                                    {
+                                        <span class="badge bg-secondary me-1">@mg.Genre?.Name</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <a href="/Movie/Details/@movie.Id" target="_blank" class="btn btn-outline-info btn-sm rounded-circle me-1" title="معاينة">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <form asp-controller="AdminDashboard" asp-action="DeleteMovie" asp-route-id="@movie.Id" method="post" class="d-inline" onsubmit="return confirm('هل أنت تأكد من إزالة هذا الفيلم؟');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-outline-danger btn-sm rounded-circle" title="حذف">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-secondary">لا توجد أفلام مضافة حالياً.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
