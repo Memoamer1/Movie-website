@@ -90,6 +90,12 @@ public class HomeController : Controller
         return View();
     }
 
+    [HttpGet("About")]
+    public IActionResult About()
+    {
+        return View();
+    }
+
     [HttpGet("Home/NotFoundPage")]
     public IActionResult NotFoundPage()
     {
@@ -100,7 +106,7 @@ public class HomeController : Controller
     public async Task<IActionResult> TestTmdb()
     {
         var genreResult = await _tmdbService.SyncGenresAsync();
-        var movieResult = await _tmdbService.SyncMoviesCategoryAsync("popular", page: 1);
+        var movieResult = await _tmdbService.SyncMoviesCategoryAsync("popular", maxPages: 1);
         return Json(new { Genres = genreResult, Movies = movieResult });
     }
 

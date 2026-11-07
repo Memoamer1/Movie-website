@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using CimaMem.Entities;
+using CimaMem.Services;
 
 namespace CimaMem.Data;
 
@@ -9,6 +11,17 @@ public static class DbSeeder
     {
         var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var db = serviceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Ensure Database Schema is Migrated
+        try
+        {
+            await db.Database.MigrateAsync();
+        }
+        catch
+        {
+            await db.Database.EnsureCreatedAsync();
+        }
 
         // Seed Roles
         string[] roles = ["Admin", "User"];
@@ -39,6 +52,16 @@ public static class DbSeeder
             {
                 await userManager.AddToRoleAsync(adminUser, "Admin");
             }
+        }
+
+        // Seed Initial Content from TMDB if Database is Empty
+        if (!await db.Movies.AnyAsync())
+        {
+            var tmdbService = serviceProvider.GetRequiredService<ITmdbService>();
+            await tmdbService.SyncGenresAsync();
+            await tmdbService.SyncMoviesCategoryAsync("popular", maxPages: 2);
+            await tmdbService.SyncMoviesCategoryAsync("top_rated", maxPages: 2);
+            await tmdbService.SyncSeriesCategoryAsync("popular", maxPages: 2);
         }
     }
 }

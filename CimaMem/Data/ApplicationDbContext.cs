@@ -22,6 +22,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<Favorite> Favorites => Set<Favorite>();
     public DbSet<WatchHistory> WatchHistories => Set<WatchHistory>();
+    public DbSet<ImportLog> ImportLogs => Set<ImportLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -55,16 +56,40 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .WithMany(g => g.SeriesGenres)
             .HasForeignKey(sg => sg.GenreId);
 
-        // Indexes
+        // Indexes for Optimization (PHASE 24)
         builder.Entity<Movie>()
             .HasIndex(m => m.TmdbId)
             .IsUnique()
             .HasFilter("[TmdbId] IS NOT NULL");
 
+        builder.Entity<Movie>()
+            .HasIndex(m => m.ReleaseDate);
+
+        builder.Entity<Movie>()
+            .HasIndex(m => m.Popularity);
+
+        builder.Entity<Movie>()
+            .HasIndex(m => m.Rating);
+
         builder.Entity<Series>()
             .HasIndex(s => s.TmdbId)
             .IsUnique()
             .HasFilter("[TmdbId] IS NOT NULL");
+
+        builder.Entity<Series>()
+            .HasIndex(s => s.FirstAirDate);
+
+        builder.Entity<Series>()
+            .HasIndex(s => s.Popularity);
+
+        builder.Entity<Series>()
+            .HasIndex(s => s.Rating);
+
+        builder.Entity<Season>()
+            .HasIndex(s => s.TmdbId);
+
+        builder.Entity<Episode>()
+            .HasIndex(e => e.TmdbId);
 
         builder.Entity<Genre>()
             .HasIndex(g => g.TmdbId);
@@ -98,7 +123,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<Review>()
             .HasOne(r => r.Series)
             .WithMany(s => s.Reviews)
-            .HasForeignKey(r => r.SeriesId)
+            .HasForeignKey(s => s.SeriesId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.Entity<Favorite>()
@@ -116,7 +141,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<Favorite>()
             .HasOne(f => f.Series)
             .WithMany(s => s.Favorites)
-            .HasForeignKey(f => f.SeriesId)
+            .HasForeignKey(s => s.SeriesId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.Entity<WatchHistory>()

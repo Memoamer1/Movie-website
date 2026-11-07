@@ -1,0 +1,267 @@
+@using CimaMem.Entities
+@{
+    ViewData["Title"] = "نظام استيراد وتحديث المحتوى - TMDB Dashboard";
+    var syncResult = TempData["SyncResult"] as string;
+    var syncSuccess = TempData["SyncSuccess"] as bool? ?? true;
+    var recentLogs = ViewBag.RecentLogs as List<ImportLog> ?? new List<ImportLog>();
+}
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-warning"><i class="bi bi-cloud-arrow-down-fill me-2"></i>مركز استيراد ومزامنة محتوى TMDB</h2>
+            <p class="text-secondary mb-0">استيراد وتحديث آلاف الأفلام والمسلسلات والمواسم والحلقات مباشرة من قاعدة بيانات TMDB العالمية</p>
+        </div>
+        <div>
+            <a href="/Admin" class="btn btn-outline-light rounded-pill px-4"><i class="bi bi-arrow-right me-1"></i> العودة للوحة التحكم</a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(syncResult))
+    {
+        <div class="alert @(syncSuccess ? "alert-success" : "alert-danger") alert-dismissible fade show rounded-4 shadow-sm" role="alert">
+            <h5 class="alert-heading fw-bold">@(syncSuccess ? "نجحت عملية المزامنة!" : "تنبيه أثناء العملية")</h5>
+            <p class="mb-0">@Html.Raw(syncResult)</p>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Quick Sync Everything Section -->
+    <div class="card bg-dark text-white border-warning rounded-4 p-4 shadow mb-5">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div>
+                <h4 class="fw-bold text-warning mb-1"><i class="bi bi-lightning-charge-fill me-2"></i>المزامنة الشاملة بنقرة واحدة (Sync Everything)</h4>
+                <p class="text-secondary mb-0">جلب كافة الفئات الرائجة والأعلى تقييماً وتحديث الأفلام والمسلسلات والتصنيفات في نفس الوقت.</p>
+            </div>
+            <form asp-controller="AdminTmdb" asp-action="SyncEverything" method="post" class="d-flex gap-2">
+                @Html.AntiForgeryToken()
+                <select name="pagesPerCategory" class="form-select bg-dark text-white border-secondary rounded-pill px-3" style="width: 140px;">
+                    <option value="1">صفحة واحدة</option>
+                    <option value="3" selected>3 صفحات</option>
+                    <option value="5">5 صفحات</option>
+                    <option value="10">10 صفحات</option>
+                    <option value="20">20 صفحة (كامل)</option>
+                </select>
+                <button type="submit" class="btn btn-warning text-dark fw-bold rounded-pill px-4 flex-shrink-0">
+                    <i class="bi bi-play-fill me-1"></i> بدء المزامنة الشاملة
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-5">
+        <!-- Movies Section -->
+        <div class="col-lg-6">
+            <div class="card bg-dark text-white border-secondary rounded-4 shadow h-100 p-4">
+                <h4 class="fw-bold text-info mb-3"><i class="bi bi-film me-2"></i>استيراد أقسام الأفلام (Movies)</h4>
+                
+                <div class="d-grid gap-3">
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="movies_popular" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">الأفلام الأكثر شعبية (Popular)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="3" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-info text-white btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center border-top border-secondary pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="movies_now_playing" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">في دور العرض حالياً (Now Playing)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="3" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-info text-white btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center border-top border-secondary pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="movies_upcoming" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">الأفلام القادمة قريباً (Upcoming)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="3" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-info text-white btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center border-top border-secondary pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="movies_top_rated" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">الأفلام الأعلى تقييماً (Top Rated)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="3" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-info text-white btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center border-top border-secondary pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="movies_discover" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">استكشاف وتحديث شمول (Discover Movies)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="5" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-info text-white btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- TV Shows Section -->
+        <div class="col-lg-6">
+            <div class="card bg-dark text-white border-secondary rounded-4 shadow h-100 p-4">
+                <h4 class="fw-bold text-success mb-3"><i class="bi bi-tv me-2"></i>استيراد أقسام المسلسلات (TV Shows)</h4>
+                
+                <div class="d-grid gap-3">
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="series_popular" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">المسلسلات الأكثر شعبية (Popular)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="3" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-success btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center border-top border-secondary pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="series_top_rated" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">المسلسلات الأعلى تقييماً (Top Rated)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="3" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-success btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center border-top border-secondary pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="series_on_the_air" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">مسلسلات يُعرض الآن (On The Air)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="3" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-success btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center border-top border-secondary pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="series_airing_today" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">مسلسلات تُعرض اليوم (Airing Today)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="3" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-success btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+
+                    <form asp-controller="AdminTmdb" asp-action="SyncCategory" method="post" class="row g-2 align-items-center border-top border-secondary pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="type" value="series_discover" />
+                        <div class="col-7">
+                            <span class="fw-bold text-light">استكشاف وتحديث شمول (Discover TV)</span>
+                        </div>
+                        <div class="col-3">
+                            <input type="number" name="pages" value="5" min="1" max="50" class="form-control form-control-sm bg-dark text-white border-secondary rounded-3 text-center" />
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-success btn-sm w-100 rounded-pill fw-bold">استيراد</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Import History Log Table (PHASE 16) -->
+    <h3 class="fw-bold text-white mb-3"><i class="bi bi-journal-text me-2 text-warning"></i>سجل عمليات الاستيراد السابقة (Import Logs)</h3>
+    <div class="card bg-dark text-white border-secondary rounded-4 shadow overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead class="table-borderless border-bottom border-secondary text-secondary">
+                    <tr>
+                        <th scope="col">العملية</th>
+                        <th scope="col">التاريخ والوقت</th>
+                        <th scope="col">المُعالج</th>
+                        <th scope="col">المستورد</th>
+                        <th scope="col">المُحدث</th>
+                        <th scope="col">الفاشل</th>
+                        <th scope="col">الحالة</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (recentLogs.Any())
+                    {
+                        foreach (var log in recentLogs)
+                        {
+                            <tr>
+                                <td class="fw-bold text-warning">@log.Type</td>
+                                <td>@log.StartedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@log.Processed</td>
+                                <td><span class="text-success fw-bold">+@log.Imported</span></td>
+                                <td><span class="text-info fw-bold">@log.Updated</span></td>
+                                <td><span class="text-danger">@log.Failed</span></td>
+                                <td>
+                                    @if (log.Status == "Completed")
+                                    {
+                                        <span class="badge bg-success">ناجحة</span>
+                                    }
+                                    else if (log.Status == "Partial")
+                                    {
+                                        <span class="badge bg-warning text-dark">جزئية</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">فاشلة</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-secondary">لا يوجد سجل عمليات مزامنة سابق حتى الآن.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

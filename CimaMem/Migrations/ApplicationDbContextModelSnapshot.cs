@@ -133,6 +133,9 @@ namespace CimaMem.Migrations
                     b.Property<string>("Overview")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<double>("Rating")
+                        .HasColumnType("float");
+
                     b.Property<int>("SeasonId")
                         .HasColumnType("int");
 
@@ -144,6 +147,9 @@ namespace CimaMem.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<int?>("TmdbId")
+                        .HasColumnType("int");
+
                     b.Property<string>("VideoUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -151,6 +157,8 @@ namespace CimaMem.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("SeasonId");
+
+                    b.HasIndex("TmdbId");
 
                     b.ToTable("Episodes");
                 });
@@ -208,6 +216,53 @@ namespace CimaMem.Migrations
                     b.HasIndex("TmdbId");
 
                     b.ToTable("Genres");
+                });
+
+            modelBuilder.Entity("CimaMem.Entities.ImportLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Imported")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Processed")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Updated")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ImportLogs");
                 });
 
             modelBuilder.Entity("CimaMem.Entities.Movie", b =>
@@ -295,6 +350,12 @@ namespace CimaMem.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
+
+                    b.HasIndex("Popularity");
+
+                    b.HasIndex("Rating");
+
+                    b.HasIndex("ReleaseDate");
 
                     b.HasIndex("TmdbId")
                         .IsUnique()
@@ -392,9 +453,14 @@ namespace CimaMem.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<int?>("TmdbId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SeriesId");
+
+                    b.HasIndex("TmdbId");
 
                     b.ToTable("Seasons");
                 });
@@ -457,6 +523,12 @@ namespace CimaMem.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("FirstAirDate");
+
+                    b.HasIndex("Popularity");
+
+                    b.HasIndex("Rating");
 
                     b.HasIndex("TmdbId")
                         .IsUnique()

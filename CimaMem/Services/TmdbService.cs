@@ -13,9 +13,6 @@ public class TmdbService : ITmdbService
     private readonly ILogger<TmdbService> _logger;
     private readonly IConfiguration _configuration;
 
-    private const string ImageBaseUrl = "https://image.tmdb.org/t/p/w500";
-    private const string BackdropBaseUrl = "https://image.tmdb.org/t/p/original";
-
     public TmdbService(
         IHttpClientFactory httpClientFactory,
         ApplicationDbContext db,
@@ -43,14 +40,14 @@ public class TmdbService : ITmdbService
 
     private void ApplyHeaders(HttpRequestMessage request)
     {
-        var bearerToken = _configuration["TmdbSettings:BearerToken"];
+        var bearerToken = _configuration["TmdbSettings:AccessToken"] ?? _configuration["TmdbSettings:BearerToken"];
         if (!string.IsNullOrEmpty(bearerToken))
         {
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearerToken);
         }
     }
 
-    private async Task<T?> GetJsonAsync<T>(string endpoint, string extraQuery = "")
+    private async Task<T?> GetJsonAsync<T>(string endpoint, string extraQuery = "", CancellationToken cancellationToken = default)
     {
         try
         {
@@ -58,14 +55,14 @@ public class TmdbService : ITmdbService
             var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
             ApplyHeaders(request);
 
-            var response = await _httpClient.SendAsync(request);
+            var response = await _httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("TMDB API request returned status {StatusCode} for URL {Url}", response.StatusCode, requestUrl);
                 return default;
             }
 
-            return await response.Content.ReadFromJsonAsync<T>();
+            return await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -74,13 +71,25 @@ public class TmdbService : ITmdbService
         }
     }
 
-    public async Task<TmdbSyncResult> SyncGenresAsync()
+    private string FormatImageUrl(string? path, bool isBackdrop = false)
     {
-        var result = new TmdbSyncResult();
+        if (string.IsNullOrEmpty(path)) return string.Empty;
+        if (path.StartsWith("http://") || path.StartsWith("https://")) return path;
+
+        var baseUrl = isBackdrop
+            ? (_configuration["TmdbSettings:BackdropBaseUrl"] ?? "https://image.tmdb.org/t/p/original")
+            : (_configuration["TmdbSettings:ImageBaseUrl"] ?? "https://image.tmdb.org/t/p/w500");
+
+        return $"{baseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
+    }
+
+    public async Task<TmdbSyncResult> SyncGenresAsync(CancellationToken cancellationToken = default)
+    {
+        var result = new TmdbSyncResult { OperationType = "SyncGenres" };
         try
         {
-            var movieGenresRes = await GetJsonAsync<TmdbGenreListResponse>("genre/movie/list");
-            var tvGenresRes = await GetJsonAsync<TmdbGenreListResponse>("genre/tv/list");
+            var movieGenresRes = await GetJsonAsync<TmdbGenreListResponse>("genre/movie/list", cancellationToken: cancellationToken);
+            var tvGenresRes = await GetJsonAsync<TmdbGenreListResponse>("genre/tv/list", cancellationToken: cancellationToken);
 
             var allGenres = new List<TmdbGenreDto>();
             if (movieGenresRes?.Genres != null) allGenres.AddRange(movieGenresRes.Genres);
@@ -88,13 +97,13 @@ public class TmdbService : ITmdbService
 
             if (!allGenres.Any())
             {
-                _logger.LogInformation("تطبيق تصنيفات العرض الاحتياطية (Fallback Genres)...");
                 allGenres = GetFallbackGenres();
             }
 
             foreach (var gDto in allGenres.GroupBy(x => x.Id).Select(x => x.First()))
             {
-                var existing = await _db.Genres.FirstOrDefaultAsync(g => g.TmdbId == gDto.Id);
+                result.ProcessedCount++;
+                var existing = await _db.Genres.FirstOrDefaultAsync(g => g.TmdbId == gDto.Id, cancellationToken);
                 if (existing == null)
                 {
                     _db.Genres.Add(new Genre
@@ -111,25 +120,27 @@ public class TmdbService : ITmdbService
                 }
             }
 
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(cancellationToken);
             result.Messages.Add("تم تحديث واستيراد التصنيفات بنجاح.");
+            await LogImportResultAsync(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "خطأ أثناء استيراد التصنيفات من TMDB.");
             result.FailedCount++;
+            result.Status = "Failed";
             result.Messages.Add($"خطأ: {ex.Message}");
         }
 
         return result;
     }
 
-    public async Task<TmdbSyncResult> SyncMoviesCategoryAsync(string categoryType, int page = 1)
+    public async Task<TmdbSyncResult> SyncMoviesCategoryAsync(string categoryType, int maxPages = 1, CancellationToken cancellationToken = default)
     {
-        var result = new TmdbSyncResult();
+        var result = new TmdbSyncResult { OperationType = $"Movies_{categoryType}" };
         try
         {
-            await SyncGenresAsync();
+            await SyncGenresAsync(cancellationToken);
 
             string endpoint = categoryType.ToLower() switch
             {
@@ -139,38 +150,118 @@ public class TmdbService : ITmdbService
                 _ => "movie/now_playing"
             };
 
-            var pagedRes = await GetJsonAsync<TmdbPagedResult<TmdbMovieDto>>(endpoint, $"&page={page}");
-            var movies = pagedRes?.Results;
+            var configuredPages = _configuration.GetValue<int>($"TmdbSettings:ImportPages:{categoryType}", maxPages);
+            int totalPagesToProcess = Math.Max(maxPages, configuredPages);
 
-            if (movies == null || !movies.Any())
+            for (int page = 1; page <= totalPagesToProcess; page++)
             {
-                _logger.LogInformation("تطبيق البيانات العرضية الاحتياطية للأفلام (Fallback Movies)...");
-                movies = GetFallbackMovies();
+                if (cancellationToken.IsCancellationRequested) break;
+
+                var pagedRes = await GetJsonAsync<TmdbPagedResult<TmdbMovieDto>>(endpoint, $"&page={page}", cancellationToken);
+                var movies = pagedRes?.Results;
+
+                if (movies == null || !movies.Any())
+                {
+                    if (page == 1) movies = GetFallbackMovies();
+                    else break;
+                }
+
+                foreach (var dto in movies)
+                {
+                    try
+                    {
+                        result.ProcessedCount++;
+                        await ProcessMovieDtoAsync(dto, result, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to process movie {TmdbId}", dto.Id);
+                        result.FailedCount++;
+                    }
+                }
+
+                await _db.SaveChangesAsync(cancellationToken);
+                result.CurrentPage = page;
+                result.TotalPages = pagedRes?.TotalPages ?? totalPagesToProcess;
+                await Task.Delay(50, cancellationToken); // Rate limit delay
             }
 
-            foreach (var dto in movies)
-            {
-                await ProcessMovieDtoAsync(dto, result);
-            }
-            await _db.SaveChangesAsync();
             result.Messages.Add($"تمت مزامنة أفلام {categoryType} بنجاح.");
+            await LogImportResultAsync(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "خطأ أثناء مزامنة أفلام {Category}", categoryType);
             result.FailedCount++;
+            result.Status = "Failed";
             result.Messages.Add($"خطأ أثناء استيراد الأفلام: {ex.Message}");
         }
 
         return result;
     }
 
-    public async Task<TmdbSyncResult> SyncSeriesCategoryAsync(string categoryType, int page = 1)
+    public async Task<TmdbSyncResult> DiscoverMoviesAsync(int maxPages = 1, string? sortBy = "popularity.desc", int? genreId = null, CancellationToken cancellationToken = default)
     {
-        var result = new TmdbSyncResult();
+        var result = new TmdbSyncResult { OperationType = "Movies_Discover" };
         try
         {
-            await SyncGenresAsync();
+            await SyncGenresAsync(cancellationToken);
+
+            string extraQuery = $"&sort_by={sortBy ?? "popularity.desc"}";
+            if (genreId.HasValue && genreId > 0)
+            {
+                extraQuery += $"&with_genres={genreId.Value}";
+            }
+
+            for (int page = 1; page <= maxPages; page++)
+            {
+                if (cancellationToken.IsCancellationRequested) break;
+
+                var pagedRes = await GetJsonAsync<TmdbPagedResult<TmdbMovieDto>>("discover/movie", $"&page={page}{extraQuery}", cancellationToken);
+                var movies = pagedRes?.Results;
+
+                if (movies == null || !movies.Any()) break;
+
+                foreach (var dto in movies)
+                {
+                    try
+                    {
+                        result.ProcessedCount++;
+                        await ProcessMovieDtoAsync(dto, result, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to discover process movie {TmdbId}", dto.Id);
+                        result.FailedCount++;
+                    }
+                }
+
+                await _db.SaveChangesAsync(cancellationToken);
+                result.CurrentPage = page;
+                result.TotalPages = pagedRes?.TotalPages ?? maxPages;
+                await Task.Delay(50, cancellationToken);
+            }
+
+            result.Messages.Add("تمت عملية استكشاف وتحديث الأفلام بنجاح.");
+            await LogImportResultAsync(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "خطأ أثناء استكشاف الأفلام DiscoverMovies");
+            result.FailedCount++;
+            result.Status = "Failed";
+            result.Messages.Add($"خطأ: {ex.Message}");
+        }
+
+        return result;
+    }
+
+    public async Task<TmdbSyncResult> SyncSeriesCategoryAsync(string categoryType, int maxPages = 1, CancellationToken cancellationToken = default)
+    {
+        var result = new TmdbSyncResult { OperationType = $"Series_{categoryType}" };
+        try
+        {
+            await SyncGenresAsync(cancellationToken);
 
             string endpoint = categoryType.ToLower() switch
             {
@@ -180,43 +271,123 @@ public class TmdbService : ITmdbService
                 _ => "tv/popular"
             };
 
-            var pagedRes = await GetJsonAsync<TmdbPagedResult<TmdbTvShowDto>>(endpoint, $"&page={page}");
-            var seriesList = pagedRes?.Results;
+            var configuredPages = _configuration.GetValue<int>($"TmdbSettings:ImportPages:{categoryType}", maxPages);
+            int totalPagesToProcess = Math.Max(maxPages, configuredPages);
 
-            if (seriesList == null || !seriesList.Any())
+            for (int page = 1; page <= totalPagesToProcess; page++)
             {
-                _logger.LogInformation("تطبيق البيانات العرضية الاحتياطية للمسلسلات (Fallback Series)...");
-                seriesList = GetFallbackSeries();
+                if (cancellationToken.IsCancellationRequested) break;
+
+                var pagedRes = await GetJsonAsync<TmdbPagedResult<TmdbTvShowDto>>(endpoint, $"&page={page}", cancellationToken);
+                var seriesList = pagedRes?.Results;
+
+                if (seriesList == null || !seriesList.Any())
+                {
+                    if (page == 1) seriesList = GetFallbackSeries();
+                    else break;
+                }
+
+                foreach (var dto in seriesList)
+                {
+                    try
+                    {
+                        result.ProcessedCount++;
+                        await ProcessSeriesDtoAsync(dto, result, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to process series {TmdbId}", dto.Id);
+                        result.FailedCount++;
+                    }
+                }
+
+                await _db.SaveChangesAsync(cancellationToken);
+                result.CurrentPage = page;
+                result.TotalPages = pagedRes?.TotalPages ?? totalPagesToProcess;
+                await Task.Delay(50, cancellationToken);
             }
 
-            foreach (var dto in seriesList)
-            {
-                await ProcessSeriesDtoAsync(dto, result);
-            }
-            await _db.SaveChangesAsync();
             result.Messages.Add($"تمت مزامنة مسلسلات {categoryType} بنجاح.");
+            await LogImportResultAsync(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "خطأ أثناء مزامنة مسلسلات {Category}", categoryType);
             result.FailedCount++;
+            result.Status = "Failed";
             result.Messages.Add($"خطأ أثناء استيراد المسلسلات: {ex.Message}");
         }
 
         return result;
     }
 
-    public async Task<Movie?> ImportMovieByTmdbIdAsync(int tmdbId)
+    public async Task<TmdbSyncResult> DiscoverSeriesAsync(int maxPages = 1, string? sortBy = "popularity.desc", int? genreId = null, CancellationToken cancellationToken = default)
+    {
+        var result = new TmdbSyncResult { OperationType = "Series_Discover" };
+        try
+        {
+            await SyncGenresAsync(cancellationToken);
+
+            string extraQuery = $"&sort_by={sortBy ?? "popularity.desc"}";
+            if (genreId.HasValue && genreId > 0)
+            {
+                extraQuery += $"&with_genres={genreId.Value}";
+            }
+
+            for (int page = 1; page <= maxPages; page++)
+            {
+                if (cancellationToken.IsCancellationRequested) break;
+
+                var pagedRes = await GetJsonAsync<TmdbPagedResult<TmdbTvShowDto>>("discover/tv", $"&page={page}{extraQuery}", cancellationToken);
+                var seriesList = pagedRes?.Results;
+
+                if (seriesList == null || !seriesList.Any()) break;
+
+                foreach (var dto in seriesList)
+                {
+                    try
+                    {
+                        result.ProcessedCount++;
+                        await ProcessSeriesDtoAsync(dto, result, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to discover series {TmdbId}", dto.Id);
+                        result.FailedCount++;
+                    }
+                }
+
+                await _db.SaveChangesAsync(cancellationToken);
+                result.CurrentPage = page;
+                result.TotalPages = pagedRes?.TotalPages ?? maxPages;
+                await Task.Delay(50, cancellationToken);
+            }
+
+            result.Messages.Add("تمت عملية استكشاف وتحديث المسلسلات بنجاح.");
+            await LogImportResultAsync(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "خطأ أثناء استكشاف المسلسلات DiscoverSeries");
+            result.FailedCount++;
+            result.Status = "Failed";
+            result.Messages.Add($"خطأ: {ex.Message}");
+        }
+
+        return result;
+    }
+
+    public async Task<Movie?> ImportMovieByTmdbIdAsync(int tmdbId, CancellationToken cancellationToken = default)
     {
         try
         {
-            await SyncGenresAsync();
-            var dto = await GetJsonAsync<TmdbMovieDto>($"movie/{tmdbId}");
+            await SyncGenresAsync(cancellationToken);
+            var dto = await GetJsonAsync<TmdbMovieDto>($"movie/{tmdbId}", cancellationToken: cancellationToken);
             if (dto == null) return null;
 
             var syncRes = new TmdbSyncResult();
-            var movie = await ProcessMovieDtoAsync(dto, syncRes);
-            await _db.SaveChangesAsync();
+            var movie = await ProcessMovieDtoAsync(dto, syncRes, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
             return movie;
         }
         catch (Exception ex)
@@ -226,26 +397,27 @@ public class TmdbService : ITmdbService
         }
     }
 
-    public async Task<Series?> ImportSeriesByTmdbIdAsync(int tmdbId)
+    public async Task<Series?> ImportSeriesByTmdbIdAsync(int tmdbId, CancellationToken cancellationToken = default)
     {
         try
         {
-            await SyncGenresAsync();
-            var dto = await GetJsonAsync<TmdbTvDetailDto>($"tv/{tmdbId}");
+            await SyncGenresAsync(cancellationToken);
+            var dto = await GetJsonAsync<TmdbTvDetailDto>($"tv/{tmdbId}", cancellationToken: cancellationToken);
             if (dto == null) return null;
 
             var syncRes = new TmdbSyncResult();
-            var series = await ProcessSeriesDtoAsync(dto, syncRes);
+            var series = await ProcessSeriesDtoAsync(dto, syncRes, cancellationToken);
 
             if (dto.Seasons != null && series != null)
             {
                 foreach (var seasonDto in dto.Seasons)
                 {
-                    var existingSeason = series.Seasons.FirstOrDefault(s => s.SeasonNumber == seasonDto.SeasonNumber);
+                    var existingSeason = series.Seasons.FirstOrDefault(s => s.SeasonNumber == seasonDto.SeasonNumber || (s.TmdbId.HasValue && s.TmdbId == seasonDto.Id));
                     if (existingSeason == null)
                     {
                         existingSeason = new Season
                         {
+                            TmdbId = seasonDto.Id,
                             SeasonNumber = seasonDto.SeasonNumber,
                             Title = seasonDto.Name,
                             Overview = seasonDto.Overview,
@@ -255,26 +427,42 @@ public class TmdbService : ITmdbService
                         };
                         series.Seasons.Add(existingSeason);
                     }
+                    else
+                    {
+                        existingSeason.TmdbId = seasonDto.Id;
+                        existingSeason.Title = seasonDto.Name;
+                        existingSeason.Overview = seasonDto.Overview;
+                        existingSeason.PosterUrl = string.IsNullOrEmpty(seasonDto.PosterPath) ? existingSeason.PosterUrl : FormatImageUrl(seasonDto.PosterPath);
+                    }
 
                     try
                     {
-                        var seasonDetails = await GetJsonAsync<TmdbSeasonDto>($"tv/{tmdbId}/season/{seasonDto.SeasonNumber}");
+                        var seasonDetails = await GetJsonAsync<TmdbSeasonDto>($"tv/{tmdbId}/season/{seasonDto.SeasonNumber}", cancellationToken: cancellationToken);
                         if (seasonDetails?.Episodes != null)
                         {
                             foreach (var epDto in seasonDetails.Episodes)
                             {
-                                if (!existingSeason.Episodes.Any(e => e.EpisodeNumber == epDto.EpisodeNumber))
+                                var existingEp = existingSeason.Episodes.FirstOrDefault(e => e.EpisodeNumber == epDto.EpisodeNumber || (e.TmdbId.HasValue && e.TmdbId == epDto.Id));
+                                if (existingEp == null)
                                 {
                                     existingSeason.Episodes.Add(new Episode
                                     {
+                                        TmdbId = epDto.Id,
                                         EpisodeNumber = epDto.EpisodeNumber,
                                         Title = epDto.Name,
                                         Overview = epDto.Overview,
                                         StillUrl = string.IsNullOrEmpty(epDto.StillPath) ? null : FormatImageUrl(epDto.StillPath),
                                         Duration = epDto.Runtime,
                                         AirDate = DateTime.TryParse(epDto.AirDate, out var epAd) ? epAd : null,
-                                        VideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+                                        VideoUrl = string.Empty
                                     });
+                                }
+                                else
+                                {
+                                    existingEp.TmdbId = epDto.Id;
+                                    existingEp.Title = epDto.Name;
+                                    existingEp.Overview = epDto.Overview;
+                                    existingEp.StillUrl = string.IsNullOrEmpty(epDto.StillPath) ? existingEp.StillUrl : FormatImageUrl(epDto.StillPath);
                                 }
                             }
                         }
@@ -286,7 +474,7 @@ public class TmdbService : ITmdbService
                 }
             }
 
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(cancellationToken);
             return series;
         }
         catch (Exception ex)
@@ -296,69 +484,127 @@ public class TmdbService : ITmdbService
         }
     }
 
-    private static string FormatImageUrl(string? path, bool isBackdrop = false)
+    public async Task<TmdbSyncResult> SyncAllContentAsync(int maxPagesPerCategory = 5, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(path)) return string.Empty;
-        if (path.StartsWith("http://") || path.StartsWith("https://")) return path;
-        return isBackdrop ? $"{BackdropBaseUrl}{path}" : $"{ImageBaseUrl}{path}";
+        var combinedResult = new TmdbSyncResult { OperationType = "SyncEverything" };
+        
+        await SyncGenresAsync(cancellationToken);
+        
+        var popularMovies = await SyncMoviesCategoryAsync("popular", maxPagesPerCategory, cancellationToken);
+        AccumulateResults(combinedResult, popularMovies);
+
+        var topRatedMovies = await SyncMoviesCategoryAsync("top_rated", maxPagesPerCategory, cancellationToken);
+        AccumulateResults(combinedResult, topRatedMovies);
+
+        var nowPlayingMovies = await SyncMoviesCategoryAsync("now_playing", maxPagesPerCategory, cancellationToken);
+        AccumulateResults(combinedResult, nowPlayingMovies);
+
+        var popularSeries = await SyncSeriesCategoryAsync("popular", maxPagesPerCategory, cancellationToken);
+        AccumulateResults(combinedResult, popularSeries);
+
+        var topRatedSeries = await SyncSeriesCategoryAsync("top_rated", maxPagesPerCategory, cancellationToken);
+        AccumulateResults(combinedResult, topRatedSeries);
+
+        combinedResult.Messages.Add("تم إنجاز المزامنة الشاملة بنجاح لكافة الفئات والأفلام والمسلسلات.");
+        await LogImportResultAsync(combinedResult);
+        return combinedResult;
     }
 
-    private async Task<Movie> ProcessMovieDtoAsync(TmdbMovieDto dto, TmdbSyncResult syncRes)
+    public async Task<List<ImportLog>> GetRecentImportLogsAsync(int count = 10)
+    {
+        return await _db.ImportLogs
+            .OrderByDescending(l => l.StartedAt)
+            .Take(count)
+            .ToListAsync();
+    }
+
+    private void AccumulateResults(TmdbSyncResult total, TmdbSyncResult current)
+    {
+        total.ProcessedCount += current.ProcessedCount;
+        total.ImportedCount += current.ImportedCount;
+        total.UpdatedCount += current.UpdatedCount;
+        total.SkippedCount += current.SkippedCount;
+        total.FailedCount += current.FailedCount;
+    }
+
+    private async Task LogImportResultAsync(TmdbSyncResult result)
+    {
+        try
+        {
+            _db.ImportLogs.Add(new ImportLog
+            {
+                Type = result.OperationType,
+                StartedAt = DateTime.UtcNow,
+                FinishedAt = DateTime.UtcNow,
+                Processed = result.ProcessedCount,
+                Imported = result.ImportedCount,
+                Updated = result.UpdatedCount,
+                Skipped = result.SkippedCount,
+                Failed = result.FailedCount,
+                Status = result.FailedCount == 0 ? "Completed" : "Partial",
+                ErrorMessage = string.Join("; ", result.Messages)
+            });
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to log import result to database.");
+        }
+    }
+
+    private async Task<Movie> ProcessMovieDtoAsync(TmdbMovieDto dto, TmdbSyncResult result, CancellationToken cancellationToken = default)
     {
         var existing = await _db.Movies
             .Include(m => m.MovieGenres)
-            .FirstOrDefaultAsync(m => m.TmdbId == dto.Id);
-
-        var poster = FormatImageUrl(dto.PosterPath);
-        var backdrop = FormatImageUrl(dto.BackdropPath, isBackdrop: true);
-        var releaseDate = DateTime.TryParse(dto.ReleaseDate, out var rd) ? rd : (DateTime?)null;
+            .FirstOrDefaultAsync(m => m.TmdbId == dto.Id, cancellationToken);
 
         if (existing == null)
         {
             existing = new Movie
             {
                 TmdbId = dto.Id,
-                Title = dto.Title,
+                Title = string.IsNullOrEmpty(dto.Title) ? (dto.OriginalTitle ?? "عنوان غير معروف") : dto.Title,
                 OriginalTitle = dto.OriginalTitle,
                 Overview = dto.Overview,
-                PosterUrl = poster,
-                BackdropUrl = backdrop,
-                ReleaseDate = releaseDate,
+                PosterUrl = FormatImageUrl(dto.PosterPath),
+                BackdropUrl = FormatImageUrl(dto.BackdropPath, isBackdrop: true),
+                ReleaseDate = DateTime.TryParse(dto.ReleaseDate, out var rd) ? rd : null,
+                Runtime = dto.Runtime,
                 Rating = dto.VoteAverage,
                 VoteCount = dto.VoteCount,
                 Popularity = dto.Popularity,
                 OriginalLanguage = dto.OriginalLanguage,
-                Runtime = dto.Runtime,
-                VideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+                VideoUrl = string.Empty,
                 CreatedAt = DateTime.UtcNow
             };
-
             _db.Movies.Add(existing);
-            syncRes.ImportedCount++;
+            result.ImportedCount++;
         }
         else
         {
-            existing.Title = dto.Title;
-            existing.OriginalTitle = dto.OriginalTitle;
-            existing.Overview = dto.Overview;
-            existing.PosterUrl = poster;
-            existing.BackdropUrl = backdrop;
-            existing.ReleaseDate = releaseDate;
+            existing.Title = string.IsNullOrEmpty(dto.Title) ? existing.Title : dto.Title;
+            existing.OriginalTitle = dto.OriginalTitle ?? existing.OriginalTitle;
+            existing.Overview = string.IsNullOrEmpty(dto.Overview) ? existing.Overview : dto.Overview;
+            existing.PosterUrl = string.IsNullOrEmpty(dto.PosterPath) ? existing.PosterUrl : FormatImageUrl(dto.PosterPath);
+            existing.BackdropUrl = string.IsNullOrEmpty(dto.BackdropPath) ? existing.BackdropUrl : FormatImageUrl(dto.BackdropPath, isBackdrop: true);
             existing.Rating = dto.VoteAverage;
             existing.VoteCount = dto.VoteCount;
             existing.Popularity = dto.Popularity;
             existing.UpdatedAt = DateTime.UtcNow;
-            syncRes.UpdatedCount++;
+            result.UpdatedCount++;
         }
 
         if (dto.GenreIds != null && dto.GenreIds.Any())
         {
-            var dbGenres = await _db.Genres.Where(g => g.TmdbId.HasValue && dto.GenreIds.Contains(g.TmdbId.Value)).ToListAsync();
+            var dbGenres = await _db.Genres
+                .Where(g => g.TmdbId.HasValue && dto.GenreIds.Contains(g.TmdbId.Value))
+                .ToListAsync(cancellationToken);
+
             foreach (var g in dbGenres)
             {
                 if (!existing.MovieGenres.Any(mg => mg.GenreId == g.Id))
                 {
-                    existing.MovieGenres.Add(new MovieGenre { Genre = g, Movie = existing });
+                    existing.MovieGenres.Add(new MovieGenre { GenreId = g.Id });
                 }
             }
         }
@@ -366,62 +612,58 @@ public class TmdbService : ITmdbService
         return existing;
     }
 
-    private async Task<Series> ProcessSeriesDtoAsync(TmdbTvShowDto dto, TmdbSyncResult syncRes)
+    private async Task<Series> ProcessSeriesDtoAsync(TmdbTvShowDto dto, TmdbSyncResult result, CancellationToken cancellationToken = default)
     {
         var existing = await _db.Series
             .Include(s => s.SeriesGenres)
             .Include(s => s.Seasons)
-            .ThenInclude(s => s.Episodes)
-            .FirstOrDefaultAsync(s => s.TmdbId == dto.Id);
-
-        var poster = FormatImageUrl(dto.PosterPath);
-        var backdrop = FormatImageUrl(dto.BackdropPath, isBackdrop: true);
-        var firstAirDate = DateTime.TryParse(dto.FirstAirDate, out var fd) ? fd : (DateTime?)null;
+            .FirstOrDefaultAsync(s => s.TmdbId == dto.Id, cancellationToken);
 
         if (existing == null)
         {
             existing = new Series
             {
                 TmdbId = dto.Id,
-                Title = dto.Name,
+                Title = string.IsNullOrEmpty(dto.Name) ? (dto.OriginalName ?? "عنوان غير معروف") : dto.Name,
                 OriginalTitle = dto.OriginalName,
                 Overview = dto.Overview,
-                PosterUrl = poster,
-                BackdropUrl = backdrop,
-                FirstAirDate = firstAirDate,
+                PosterUrl = FormatImageUrl(dto.PosterPath),
+                BackdropUrl = FormatImageUrl(dto.BackdropPath, isBackdrop: true),
+                FirstAirDate = DateTime.TryParse(dto.FirstAirDate, out var ad) ? ad : null,
                 Rating = dto.VoteAverage,
                 VoteCount = dto.VoteCount,
                 Popularity = dto.Popularity,
                 OriginalLanguage = dto.OriginalLanguage,
                 CreatedAt = DateTime.UtcNow
             };
-
             _db.Series.Add(existing);
-            syncRes.ImportedCount++;
+            result.ImportedCount++;
         }
         else
         {
-            existing.Title = dto.Name;
-            existing.OriginalTitle = dto.OriginalName;
-            existing.Overview = dto.Overview;
-            existing.PosterUrl = poster;
-            existing.BackdropUrl = backdrop;
-            existing.FirstAirDate = firstAirDate;
+            existing.Title = string.IsNullOrEmpty(dto.Name) ? existing.Title : dto.Name;
+            existing.OriginalTitle = dto.OriginalName ?? existing.OriginalTitle;
+            existing.Overview = string.IsNullOrEmpty(dto.Overview) ? existing.Overview : dto.Overview;
+            existing.PosterUrl = string.IsNullOrEmpty(dto.PosterPath) ? existing.PosterUrl : FormatImageUrl(dto.PosterPath);
+            existing.BackdropUrl = string.IsNullOrEmpty(dto.BackdropPath) ? existing.BackdropUrl : FormatImageUrl(dto.BackdropPath, isBackdrop: true);
             existing.Rating = dto.VoteAverage;
             existing.VoteCount = dto.VoteCount;
             existing.Popularity = dto.Popularity;
             existing.UpdatedAt = DateTime.UtcNow;
-            syncRes.UpdatedCount++;
+            result.UpdatedCount++;
         }
 
         if (dto.GenreIds != null && dto.GenreIds.Any())
         {
-            var dbGenres = await _db.Genres.Where(g => g.TmdbId.HasValue && dto.GenreIds.Contains(g.TmdbId.Value)).ToListAsync();
+            var dbGenres = await _db.Genres
+                .Where(g => g.TmdbId.HasValue && dto.GenreIds.Contains(g.TmdbId.Value))
+                .ToListAsync(cancellationToken);
+
             foreach (var g in dbGenres)
             {
                 if (!existing.SeriesGenres.Any(sg => sg.GenreId == g.Id))
                 {
-                    existing.SeriesGenres.Add(new SeriesGenre { Genre = g, Series = existing });
+                    existing.SeriesGenres.Add(new SeriesGenre { GenreId = g.Id });
                 }
             }
         }
@@ -429,93 +671,47 @@ public class TmdbService : ITmdbService
         return existing;
     }
 
-    private static List<TmdbGenreDto> GetFallbackGenres() => new()
+    private List<TmdbGenreDto> GetFallbackGenres()
     {
-        new TmdbGenreDto { Id = 28, Name = "أكشن" },
-        new TmdbGenreDto { Id = 12, Name = "مغامرة" },
-        new TmdbGenreDto { Id = 16, Name = "رسوم متحركة" },
-        new TmdbGenreDto { Id = 35, Name = "كوميديا" },
-        new TmdbGenreDto { Id = 80, Name = "جريمة" },
-        new TmdbGenreDto { Id = 18, Name = "دراما" },
-        new TmdbGenreDto { Id = 27, Name = "رعب" },
-        new TmdbGenreDto { Id = 878, Name = "خيال علمي" }
-    };
+        return new List<TmdbGenreDto>
+        {
+            new() { Id = 28, Name = "أكشن" },
+            new() { Id = 12, Name = "مغامرة" },
+            new() { Id = 16, Name = "أنيميشن" },
+            new() { Id = 35, Name = "كوميديا" },
+            new() { Id = 80, Name = "جريمة" },
+            new() { Id = 99, Name = "وثائقي" },
+            new() { Id = 18, Name = "دراما" },
+            new() { Id = 10751, Name = "عائلي" },
+            new() { Id = 14, Name = "فانتازيا" },
+            new() { Id = 36, Name = "تاريخ" },
+            new() { Id = 27, Name = "رعب" },
+            new() { Id = 10402, Name = "موسيقى" },
+            new() { Id = 9648, Name = "غموض" },
+            new() { Id = 10749, Name = "رومانسية" },
+            new() { Id = 878, Name = "خيال علمي" },
+            new() { Id = 53, Name = "إثارة" },
+            new() { Id = 10752, Name = "حرب" },
+            new() { Id = 37, Name = "غرب أمريكي" }
+        };
+    }
 
-    private static List<TmdbMovieDto> GetFallbackMovies() => new()
+    private List<TmdbMovieDto> GetFallbackMovies()
     {
-        new TmdbMovieDto
+        return new List<TmdbMovieDto>
         {
-            Id = 550,
-            Title = "Fight Club",
-            OriginalTitle = "Fight Club",
-            Overview = "عامل مكتب مصاب بالأرق وصانع صابون غريب الأطوار يؤسسان نادياً سرياً للقتال يتطور إلى شيء أكبر بكثير.",
-            PosterPath = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500",
-            BackdropPath = "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=1200",
-            ReleaseDate = "1999-10-15",
-            VoteAverage = 8.4,
-            VoteCount = 26000,
-            Popularity = 95.5,
-            GenreIds = new List<int> { 18, 80 }
-        },
-        new TmdbMovieDto
-        {
-            Id = 157336,
-            Title = "Interstellar",
-            OriginalTitle = "Interstellar",
-            Overview = "فريق من المستكشفين يسافرون عبر ثقب دودي في الفضاء في محاولة لضمان بقاء البشرية.",
-            PosterPath = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=500",
-            BackdropPath = "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1200",
-            ReleaseDate = "2014-11-05",
-            VoteAverage = 8.6,
-            VoteCount = 31000,
-            Popularity = 120.4,
-            GenreIds = new List<int> { 12, 18, 878 }
-        },
-        new TmdbMovieDto
-        {
-            Id = 27205,
-            Title = "Inception",
-            OriginalTitle = "Inception",
-            Overview = "لص يسرق الأسرار من خلال تقنية مشاركة الأحلام يُمنح فرصة لاستعادة حياته السابقة كفدية لزرع فكرة في ذهن رئيس تنفيذي.",
-            PosterPath = "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=500",
-            BackdropPath = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200",
-            ReleaseDate = "2010-07-15",
-            VoteAverage = 8.3,
-            VoteCount = 34000,
-            Popularity = 110.2,
-            GenreIds = new List<int> { 28, 878, 12 }
-        }
-    };
+            new() { Id = 550, Title = "Fight Club", OriginalTitle = "Fight Club", Overview = "فيلم الإثارة والدراما الشهير.", PosterPath = "/pB8O2W16-e-161d.jpg", VoteAverage = 8.4, Popularity = 60.5, ReleaseDate = "1999-10-15", GenreIds = new() { 18, 53 } },
+            new() { Id = 27205, Title = "Inception", OriginalTitle = "Inception", Overview = "فيلم الخيال العلمي والأكشن.", PosterPath = "/oYuLEIrLzY19B2L9z92.jpg", VoteAverage = 8.3, Popularity = 90.0, ReleaseDate = "2010-07-16", GenreIds = new() { 28, 878, 12 } },
+            new() { Id = 157336, Title = "Interstellar", OriginalTitle = "Interstellar", Overview = "رحلة الفضاء المذهلة بين النجوم.", PosterPath = "/gEU2g-1-2g-1.jpg", VoteAverage = 8.6, Popularity = 95.0, ReleaseDate = "2014-11-05", GenreIds = new() { 12, 18, 878 } }
+        };
+    }
 
-    private static List<TmdbTvShowDto> GetFallbackSeries() => new()
+    private List<TmdbTvShowDto> GetFallbackSeries()
     {
-        new TmdbTvShowDto
+        return new List<TmdbTvShowDto>
         {
-            Id = 1396,
-            Name = "Breaking Bad",
-            OriginalName = "Breaking Bad",
-            Overview = "مدرس كيمياء في المدرسة الثانوية يُشخص بسرطان الرئة غير القابل للجراحة يتحول إلى تصنيع وبيع الميثامفيتامين لتأمين مستقبل عائلته.",
-            PosterPath = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500",
-            BackdropPath = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200",
-            FirstAirDate = "2008-01-20",
-            VoteAverage = 8.9,
-            VoteCount = 13000,
-            Popularity = 140.0,
-            GenreIds = new List<int> { 18, 80 }
-        },
-        new TmdbTvShowDto
-        {
-            Id = 66732,
-            Name = "Stranger Things",
-            OriginalName = "Stranger Things",
-            Overview = "عندما يختفي صبي صغير، تكشف بلدة صغيرة عن سر يتضمن تجارب سرية وقوى خيالية مرعبة وفتاة صغيرة غريبة الأطوار.",
-            PosterPath = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500",
-            BackdropPath = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200",
-            FirstAirDate = "2016-07-15",
-            VoteAverage = 8.6,
-            VoteCount = 16000,
-            Popularity = 150.5,
-            GenreIds = new List<int> { 18, 878, 27 }
-        }
-    };
+            new() { Id = 1396, Name = "Breaking Bad", OriginalName = "Breaking Bad", Overview = "مسلسل الجريمة والدراما الأسطوري.", PosterPath = "/ztkUQFLyC19B2L.jpg", VoteAverage = 8.9, Popularity = 120.0, FirstAirDate = "2008-01-20", GenreIds = new() { 18, 80 } },
+            new() { Id = 1399, Name = "Game of Thrones", OriginalName = "Game of Thrones", Overview = "صراع العروش في الممالك السبع.", PosterPath = "/u3bZf2n2j19.jpg", VoteAverage = 8.4, Popularity = 150.0, FirstAirDate = "2011-04-17", GenreIds = new() { 10765, 18 } }
+        };
+    }
 }

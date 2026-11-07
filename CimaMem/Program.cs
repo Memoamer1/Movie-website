@@ -50,6 +50,9 @@ builder.Services.AddHttpClient("TmdbClient", client =>
 
 builder.Services.AddScoped<ITmdbService, TmdbService>();
 
+// Register Background Sync Service
+builder.Services.AddHostedService<TmdbSyncBackgroundService>();
+
 // Add MVC Services
 builder.Services.AddControllersWithViews();
 
